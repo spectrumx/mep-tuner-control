@@ -12,7 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import logging
+import os
+
 from .tuner_base import MEPTuner
 from .valon import ValonTuner
 
 __all__ = (MEPTuner, ValonTuner)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(
+    os.environ.get(f"{__name__.replace('.', '_').upper()}_LOG_LEVEL", "NOTSET")
+)

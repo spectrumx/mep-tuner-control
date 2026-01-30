@@ -20,12 +20,18 @@ Ryan Volz (rvolz@mit.edu) 01/2026
 
 import dataclasses
 import logging
+import os
 import time
 import typing
 
 import serial
 
 from .tuner_base import MEPTuner
+
+logger = logging.getLogger(__name__)
+logger.setLevel(
+    os.environ.get(f"{__name__.replace('.', '_').upper()}_LOG_LEVEL", "NOTSET")
+)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -56,12 +62,12 @@ class ValonTuner(MEPTuner):
             self._reset_serial_connection()
         except Exception:
             self.ready = False
-            logging.info("Could not connect to Valon synthesizer", exc_info=True)
+            logger.info("Could not connect to Valon synthesizer", exc_info=True)
         else:
             self.ready = True
-            logging.debug("Getting VALON device status string:")
+            logger.debug("Getting VALON device status string:")
             self.info = self.send_cmd("STAT")
-            logging.debug(self.info)
+            logger.debug(self.info)
 
     def _reset_serial_connection(self):
         if self._ser and self._ser.is_open:
@@ -107,7 +113,7 @@ class ValonTuner(MEPTuner):
                 if n == (retries - 1):
                     raise e
                 else:
-                    logging.warning(f"Failed to send command: {command}", exc_info=True)
+                    logger.warning(f"Failed to send command: {command}", exc_info=True)
                     self._reset_serial_connection()
             else:
                 break
@@ -115,11 +121,11 @@ class ValonTuner(MEPTuner):
 
     def set_freq(self, freq_mhz):
         """Set the output frequency of the synthesizer."""
-        logging.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
+        logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
         cmd = f"F{freq_mhz}MHz"
-        logging.debug(f"Sending frequency command: {cmd}")
+        logger.debug(f"Sending frequency command: {cmd}")
         result = self.send_cmd(cmd)
-        logging.debug(result)
+        logger.debug(result)
         self.freq_mhz = freq_mhz
         return result
 
@@ -130,18 +136,18 @@ class ValonTuner(MEPTuner):
         Valon.
 
         """
-        logging.info(f"Setting output power level to {pwr_dBm} dBm")
+        logger.info(f"Setting output power level to {pwr_dBm} dBm")
         cmd = f"PWR {pwr_dBm}"
-        logging.debug(f"Sending power command: {cmd}")
+        logger.debug(f"Sending power command: {cmd}")
         result = self.send_cmd(cmd)
-        logging.debug(result)
+        logger.debug(result)
         self.pwr_dBm = pwr_dBm
         return result
 
     def get_lock_status(self):
         """Return the status of the PLL lock condition from Main and Sub PLLs"""
         cmd = "LK"
-        logging.debug(f"Sending lock status command: {cmd}")
+        logger.debug(f"Sending lock status command: {cmd}")
         result = self.send_cmd(cmd)
-        logging.debug(result)
+        logger.debug(result)
         return result
