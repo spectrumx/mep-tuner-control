@@ -32,7 +32,7 @@ from mep_tuners import MEPTuner, ValonTuner
 # Holds tuner objects and enables their configuration through jsonargparse
 # (types are ordered by preference)
 @dataclasses.dataclass(kw_only=True)
-class TunerConfig:
+class KnownTuners:
     valon: ValonTuner = dataclasses.field(default_factory=ValonTuner)
 
 
@@ -41,7 +41,7 @@ class TunerControlService:
     # service configuration variables
     announce_topic: str = "announce/{service.name}"
     command_topic: str = "{service.name}/command"
-    config: TunerConfig = dataclasses.field(default_factory=TunerConfig)
+    known_tuners: KnownTuners = dataclasses.field(default_factory=KnownTuners)
     name: str = "tuner_control"
     node_id: Optional[str] = None
     status_topic: str = "{service.name}/status"
@@ -59,11 +59,11 @@ class TunerControlService:
         get_ready_tuner(self)
 
 
-def get_ready_tuner(service, force_config=None):
+def get_ready_tuner(service, force_tuner=None):
     """Iterate through known tuners and take the first ready one"""
-    if force_config is not None:
-        service.tuner = getattr(service.config, force_config)
-    for tuner in service.config.__dict__.values:
+    if force_tuner is not None:
+        service.tuner = getattr(service.known_tuners, force_tuner)
+    for tuner in service.known_tuners.__dict__.values:
         if tuner.ready:
             service.tuner = tuner
             break
@@ -125,7 +125,7 @@ async def process_commands(client, service):
     async for message in client.messages:
         payload = json.loads(message.payload.decode())
         if payload["task_name"] == "query_tuners":
-            get_ready_tuner(service, force_config=payload.get("force_config", None))
+            get_ready_tuner(service, force_tuner=payload.get("force_tuner", None))
             await send_status(client, service)
         elif payload["task_name"] == "status":
             await send_status(client, service)
