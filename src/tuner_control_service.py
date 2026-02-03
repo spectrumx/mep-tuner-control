@@ -41,7 +41,7 @@ class TunerControlService:
     # service configuration variables
     announce_topic: str = "announce/{service.name}"
     command_topic: str = "{service.name}/command"
-    known_tuners: KnownTuners = dataclasses.field(default_factory=KnownTuners)
+    known_tuners: KnownTuners = dataclasses.field(default_factory=lambda: KnownTuners())
     name: str = "tuner_control"
     node_id: Optional[str] = None
     status_topic: str = "{service.name}/status"
@@ -63,7 +63,7 @@ def get_ready_tuner(service, force_tuner=None):
     """Iterate through known tuners and take the first ready one"""
     if force_tuner is not None:
         service.tuner = getattr(service.known_tuners, force_tuner)
-    for tuner in service.known_tuners.__dict__.values:
+    for tuner in service.known_tuners.__dict__.values():
         if tuner.ready:
             service.tuner = tuner
             break

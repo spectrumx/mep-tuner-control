@@ -24,3 +24,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(
     os.environ.get(f"{__name__.replace('.', '_').upper()}_LOG_LEVEL", "NOTSET")
 )
+logger.propagate = False
+_console_handler = logging.StreamHandler()
+_console_handler.setLevel(logging.DEBUG)
+logger.addHandler(_console_handler)

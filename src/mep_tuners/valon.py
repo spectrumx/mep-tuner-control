@@ -70,7 +70,7 @@ class ValonTuner(MEPTuner):
             logger.debug(self.info)
 
     def _reset_serial_connection(self):
-        if self._ser and self._ser.is_open:
+        if hasattr(self, "_ser") and self._ser.is_open:
             self._ser.close()
 
         self._ser = serial.Serial(
@@ -82,8 +82,9 @@ class ValonTuner(MEPTuner):
 
     def __del__(self):
         """Close serial connection."""
-        self._ser.reset_input_buffer()
-        del self._ser
+        if hasattr(self, "_ser"):
+            self._ser.reset_input_buffer()
+            del self._ser
 
     def _send_cmd(self, command):
         """Send a command string to the Valon over serial.

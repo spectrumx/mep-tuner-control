@@ -18,6 +18,7 @@ tuner_base.py
 Abstract base class for MEP tuner devices defining the standard tuner interface.
 
 Author: nicholas.rainville@colorado.edu
+Author: rvolz@mit.edu
 """
 
 import dataclasses
