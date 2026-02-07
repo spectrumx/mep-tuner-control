@@ -27,24 +27,27 @@ from abc import ABC, abstractmethod
 
 
 @dataclasses.dataclass(kw_only=True)
-class MEPTuner(ABC):
-    name: str = dataclasses.field(default="mep_tuner", init=False)
-    ready: bool = dataclasses.field(default=True, init=False)
-    freq_mhz: typing.Optional[float] = dataclasses.field(default=None, init=False)
+class TunerBase(ABC):
+    name: str = "tuner_base"
+    freq_mhz: typing.Optional[float] = None
 
-    def __del__(self):
-        """Destructor - can be overridden by child classes"""
-        self.ready = False
-
-    def __bool__(self):
-        """Test if tuner is ready or available to be used"""
-        return self.ready
-
-    def reset_connection(self):
-        """Reset tuner connection - may be implemented by child classes"""
-        pass
+    def __post_init__(self):
+        if self.freq_mhz is not None:
+            self.set_freq(self.freq_mhz)
 
     @abstractmethod
     def set_freq(self, freq_mhz):
-        """Abstract method to set frequency - must be implemented by child classes"""
+        """Set tuner frequency - must be implemented by child classes"""
         self.freq_mhz = freq_mhz
+
+    def replace(self, /, **changes):
+        """Create a new tuner object, replacing fields with values from `changes`."""
+        return dataclasses.replace(self, **changes)
+
+
+@dataclasses.dataclass
+class TunerParamsBase:
+    tuner_class: typing.ClassVar[TunerBase] = TunerBase
+
+    def create_tuner(self):
+        return self.tuner_class(**dataclasses.asdict(self))

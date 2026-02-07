@@ -26,7 +26,7 @@ import typing
 
 import serial
 
-from .tuner_base import MEPTuner
+from .tuner_base import TunerBase, TunerParamsBase
 
 logger = logging.getLogger(__name__)
 logger.setLevel(
@@ -35,7 +35,7 @@ logger.setLevel(
 
 
 @dataclasses.dataclass(kw_only=True)
-class ValonTuner(MEPTuner):
+class ValonTuner(TunerBase):
     """Valon 5015/5019 RF Synthesizer over a serial connection.
 
     This tool configures the synthesizer via USB serial connection.
@@ -48,43 +48,28 @@ class ValonTuner(MEPTuner):
 
     """
 
-    name: str = dataclasses.field(default="valon", init=False)
+    name: str = "valon"
     port: str = "/dev/valon5015"  # default assumes persistent udev symlink
     baudrate: int = 9600
     timeout: float = 1.0
-    pwr_dBm: typing.Optional[float] = dataclasses.field(default=None, init=False)
+    pwr_dBm: typing.Optional[float] = None
+    info: typing.Optional[str] = None
 
     def __post_init__(self):
-        self.reset_connection()
-
-    def reset_connection(self):
-        try:
-            self._reset_serial_connection()
-        except Exception:
-            self.ready = False
-            logger.info("Could not connect to Valon synthesizer", exc_info=True)
-        else:
-            self.ready = True
-            logger.debug("Getting VALON device status string:")
-            self.info = self.send_cmd("STAT")
-            logger.debug(self.info)
-
-    def _reset_serial_connection(self):
-        if hasattr(self, "_ser") and self._ser.is_open:
-            self._ser.close()
-
-        self._ser = serial.Serial(
+        self.ser = serial.Serial(
             port=self.port, baudrate=self.baudrate, timeout=self.timeout
         )
-
         # one way to clear -> can also turn dtr on and off
-        self._ser.reset_input_buffer()
+        self.ser.reset_input_buffer()
 
-    def __del__(self):
-        """Close serial connection."""
-        if hasattr(self, "_ser"):
-            self._ser.reset_input_buffer()
-            del self._ser
+        logger.info("Getting VALON device status string:")
+        self.info = self.send_cmd("STAT")
+        logger.info(self.info)
+
+        super().__post_init__()
+
+        if self.pwr_dBm is not None:
+            self.set_power(self.pwr_dBm)
 
     def _send_cmd(self, command):
         """Send a command string to the Valon over serial.
@@ -109,7 +94,9 @@ class ValonTuner(MEPTuner):
         """
         for n in range(retries):
             try:
+                logger.debug(f"Sending tuner command: {command}")
                 response = self._send_cmd(command)
+                logger.debug(response)
             except Exception as e:
                 if n == (retries - 1):
                     raise e
@@ -124,9 +111,7 @@ class ValonTuner(MEPTuner):
         """Set the output frequency of the synthesizer."""
         logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
         cmd = f"F{freq_mhz}MHz"
-        logger.debug(f"Sending frequency command: {cmd}")
         result = self.send_cmd(cmd)
-        logger.debug(result)
         self.freq_mhz = freq_mhz
         return result
 
@@ -139,16 +124,28 @@ class ValonTuner(MEPTuner):
         """
         logger.info(f"Setting output power level to {pwr_dBm} dBm")
         cmd = f"PWR {pwr_dBm}"
-        logger.debug(f"Sending power command: {cmd}")
         result = self.send_cmd(cmd)
-        logger.debug(result)
         self.pwr_dBm = pwr_dBm
         return result
 
     def get_lock_status(self):
         """Return the status of the PLL lock condition from Main and Sub PLLs"""
+        logger.info("Getting PLL lock condition from Main and Sub PLLs")
         cmd = "LK"
-        logger.debug(f"Sending lock status command: {cmd}")
         result = self.send_cmd(cmd)
-        logger.debug(result)
         return result
+
+
+ValonTunerParams = dataclasses.make_dataclass(
+    "ValonTunerParams",
+    [(f.name, f.type, f) for f in dataclasses.fields(ValonTuner)]
+    + [
+        (
+            "tuner_class",
+            typing.ClassVar[TunerBase],
+            dataclasses.field(default=ValonTuner),
+        )
+    ],
+    bases=(TunerParamsBase,),
+    kw_only=True,
+)

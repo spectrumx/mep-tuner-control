@@ -15,10 +15,10 @@
 import logging
 import os
 
-from .tuner_base import MEPTuner
-from .valon import ValonTuner
+from .tuner_base import TunerBase
+from .valon import ValonTuner, ValonTunerParams
 
-__all__ = (MEPTuner, ValonTuner)
+__all__ = (TunerBase, ValonTuner, ValonTunerParams)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(

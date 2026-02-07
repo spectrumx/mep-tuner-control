@@ -15,6 +15,7 @@
 
 import dataclasses
 import json
+import logging
 import os
 import socket
 import time
@@ -26,14 +27,23 @@ import anyio
 import exceptiongroup
 import jsonargparse
 
-from mep_tuners import MEPTuner, ValonTuner
+from mep_tuners import TunerBase, ValonTunerParams
+
+logger = logging.getLogger("tuner_control_service")
+logger.setLevel(os.environ.get("TUNER_CONTROL_SERVICE_LOG_LEVEL", "NOTSET"))
+logger.propagate = False
+_console_handler = logging.StreamHandler()
+_console_handler.setLevel(logging.DEBUG)
+logger.addHandler(_console_handler)
 
 
-# Holds tuner objects and enables their configuration through jsonargparse
+# Holds tuner object parameters to make available through jsonargparse
 # (types are ordered by preference)
 @dataclasses.dataclass(kw_only=True)
-class KnownTuners:
-    valon: ValonTuner = dataclasses.field(default_factory=ValonTuner)
+class TunerConfig:
+    valon: ValonTunerParams = dataclasses.field(
+        default_factory=lambda: ValonTunerParams(name="valon")
+    )
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -41,12 +51,12 @@ class TunerControlService:
     # service configuration variables
     announce_topic: str = "announce/{service.name}"
     command_topic: str = "{service.name}/command"
-    known_tuners: KnownTuners = dataclasses.field(default_factory=lambda: KnownTuners())
+    cfg: TunerConfig = dataclasses.field(default_factory=lambda: TunerConfig())
     name: str = "tuner_control"
     node_id: Optional[str] = None
     status_topic: str = "{service.name}/status"
     # service state variables
-    tuner: MEPTuner = dataclasses.field(default=False, init=False)
+    tuner: Optional[TunerBase] = dataclasses.field(default=None, init=False)
 
     def __post_init__(self):
         if self.node_id is None:
@@ -56,16 +66,20 @@ class TunerControlService:
         self.command_topic = self.command_topic.format(service=self)
         self.status_topic = self.status_topic.format(service=self)
 
-        get_ready_tuner(self)
+        init_tuner(self)
 
 
-def get_ready_tuner(service, force_tuner=None):
+def init_tuner(service, force_tuner=None):
     """Iterate through known tuners and take the first ready one"""
     if force_tuner is not None:
-        service.tuner = getattr(service.known_tuners, force_tuner)
-    for tuner in service.known_tuners.__dict__.values():
-        if tuner.ready:
-            service.tuner = tuner
+        tuner_config = getattr(service.cfg, force_tuner)
+        service.tuner = tuner_config.create_tuner()
+    for name, tuner_config in service.cfg.__dict__.items():
+        try:
+            service.tuner = tuner_config.create_tuner()
+        except Exception:
+            logger.info(f"Failed to init tuner: {name}", exc_info=True)
+        else:
             break
     else:
         service.tuner = None
@@ -92,7 +106,7 @@ async def send_status(client, service):
     }
     if service.tuner is not None:
         payload["state"] = "ready"
-        payload["tuner"] = service.tuner.asdict()
+        payload["tuner"] = dataclasses.asdict(service.tuner)
     await client.publish(service.status_topic, json.dumps(payload), retain=True)
 
 
@@ -124,8 +138,20 @@ async def process_tuner_command(client, service, payload):
 async def process_commands(client, service):
     async for message in client.messages:
         payload = json.loads(message.payload.decode())
-        if payload["task_name"] == "query_tuners":
-            get_ready_tuner(service, force_tuner=payload.get("force_tuner", None))
+        if payload["task_name"] == "init_tuner":
+            init_tuner(service, force_tuner=payload.get("force_tuner", None))
+            await send_status(client, service)
+        elif payload["task_name"] == "restart_tuner":
+            response_topic = payload.get("response_topic", None)
+            if service.tuner is not None:
+                try:
+                    service.tuner = service.tuner.replace()
+                except Exception:
+                    msg = f"ERROR restarting tuner:\n{traceback.format_exc()}"
+                    await send_response(client, service, msg, response_topic)
+                else:
+                    msg = "Restarted tuner successfully"
+                    await send_response(client, service, msg, response_topic)
             await send_status(client, service)
         elif payload["task_name"] == "status":
             await send_status(client, service)
