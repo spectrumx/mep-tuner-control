@@ -22,10 +22,10 @@ import os
 import socket
 import time
 import traceback
-import typing
 from typing import Optional
 
 import aiomqtt
+import annotationlib
 import anyio
 import exceptiongroup
 import jsonargparse
@@ -103,7 +103,9 @@ async def send_announce(client, service):
         ):
             tuner_commands[name][method_name] = {
                 "task_name": method_name,
-                "arguments": typing.get_type_hints(fun),
+                "arguments": annotationlib.get_annotations(
+                    fun, annotationlib.Format.STRING
+                ),
                 "doc": fun.__doc__,
             }
     payload = {
