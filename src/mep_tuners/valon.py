@@ -49,11 +49,17 @@ class ValonTuner(TunerBase):
     """
 
     name: str = "valon"
+    """Name of tuner instance"""
     port: str = "/dev/valon5015"  # default assumes persistent udev symlink
+    """Serial device name"""
     baudrate: int = 9600
+    """Serial device baud rate"""
     timeout: float = 1.0
-    pwr_dBm: typing.Optional[float] = None
+    """Serial device read timeout in seconds"""
+    pwr_dbm: typing.Optional[float] = None
+    """Output power in dBm"""
     info: typing.Optional[str] = None
+    """Status string (set upon initialization)"""
 
     def __post_init__(self):
         self.ser = serial.Serial(
@@ -68,8 +74,8 @@ class ValonTuner(TunerBase):
 
         super().__post_init__()
 
-        if self.pwr_dBm is not None:
-            self.set_power(self.pwr_dBm)
+        if self.pwr_dbm is not None:
+            self.set_power(self.pwr_dbm)
 
     def _send_cmd(self, command: str):
         """Send a command string to the Valon over serial.
@@ -115,17 +121,17 @@ class ValonTuner(TunerBase):
         self.freq_mhz = freq_mhz
         return result
 
-    def set_power(self, pwr_dBm: float):
+    def set_power(self, pwr_dbm: float):
         """Set output power level.
 
         Valid Range -50 - 20. Can be brought lower configuring extra settings in the
         Valon.
 
         """
-        logger.info(f"Setting output power level to {pwr_dBm} dBm")
-        cmd = f"PWR {pwr_dBm}"
+        logger.info(f"Setting output power level to {pwr_dbm} dBm")
+        cmd = f"PWR {pwr_dbm}"
         result = self.send_cmd(cmd)
-        self.pwr_dBm = pwr_dBm
+        self.pwr_dbm = pwr_dbm
         return result
 
     def get_lock_status(self):

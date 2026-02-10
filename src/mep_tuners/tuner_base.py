@@ -29,7 +29,9 @@ from abc import ABC, abstractmethod
 @dataclasses.dataclass(kw_only=True)
 class TunerBase(ABC):
     name: str = "tuner_base"
+    """Name of tuner instance"""
     freq_mhz: typing.Optional[float] = None
+    """Tuner frequency in MHz"""
 
     def __post_init__(self):
         if self.freq_mhz is not None:
