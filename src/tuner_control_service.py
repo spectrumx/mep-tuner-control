@@ -80,7 +80,8 @@ def init_tuner(service, force_tuner=None):
             logger.debug(f"Trying to init tuner: {name}")
             service.tuner = tuner_config.create_tuner()
         except Exception:
-            logger.info(f"Failed to init tuner: {name}", exc_info=True)
+            logger.info(f"Failed to init tuner: {name}")
+            logger.debug("Tuner exception:", exc_info=True)
         else:
             logger.info(f"Initialized tuner: {name}")
             break
@@ -154,7 +155,7 @@ async def process_tuner_command(client, service, payload):
 
 
 async def process_commands(client, service):
-    logger.info(f"{service.name} listening for commands")
+    logger.info(f"Service {service.name} listening for commands")
     async for message in client.messages:
         payload = json.loads(message.payload.decode())
         logger.debug(f"Received message:\n{json.dumps(payload)}")
@@ -220,8 +221,8 @@ async def main(service):
 
 
 if __name__ == "__main__":
+    logger.info("Starting tuner_control_service")
     service = jsonargparse.auto_cli(
         TunerControlService, env_prefix="TUNER", default_env=True
     )
-    logger.info(f"Starting {service.name}")
     anyio.run(main, service)
