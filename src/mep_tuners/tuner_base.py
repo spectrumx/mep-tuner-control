@@ -36,13 +36,9 @@ class TunerBase(ABC):
             self.set_freq(self.freq_mhz)
 
     @abstractmethod
-    def set_freq(self, freq_mhz):
+    def set_freq(self, freq_mhz: float):
         """Set tuner frequency - must be implemented by child classes"""
         self.freq_mhz = freq_mhz
-
-    def replace(self, /, **changes):
-        """Create a new tuner object, replacing fields with values from `changes`."""
-        return dataclasses.replace(self, **changes)
 
 
 @dataclasses.dataclass

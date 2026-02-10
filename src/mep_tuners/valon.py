@@ -71,7 +71,7 @@ class ValonTuner(TunerBase):
         if self.pwr_dBm is not None:
             self.set_power(self.pwr_dBm)
 
-    def _send_cmd(self, command):
+    def _send_cmd(self, command: str):
         """Send a command string to the Valon over serial.
 
         Appends carriage return. Returns any response.
@@ -86,7 +86,7 @@ class ValonTuner(TunerBase):
 
         return response.decode(errors="ignore")
 
-    def send_cmd(self, command, retries=3):
+    def send_cmd(self, command: str, retries: int = 3):
         """Send a command string to the Valon over serial.
 
         Appends carriage return. Returns any response.
@@ -107,7 +107,7 @@ class ValonTuner(TunerBase):
                 break
         return response
 
-    def set_freq(self, freq_mhz):
+    def set_freq(self, freq_mhz: float):
         """Set the output frequency of the synthesizer."""
         logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
         cmd = f"F{freq_mhz}MHz"
@@ -115,7 +115,7 @@ class ValonTuner(TunerBase):
         self.freq_mhz = freq_mhz
         return result
 
-    def set_power(self, pwr_dBm):
+    def set_power(self, pwr_dBm: float):
         """Set output power level.
 
         Valid Range -50 - 20. Can be brought lower configuring extra settings in the

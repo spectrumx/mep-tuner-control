@@ -13,13 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import dataclasses
+import inspect
 import json
 import logging
 import os
 import socket
 import time
 import traceback
+import typing
 from typing import Optional
 
 import aiomqtt
@@ -91,15 +94,49 @@ def init_tuner(service, force_tuner=None):
 
 
 async def send_announce(client, service):
+    # inspect known Tuner classes to get valid tuner commands
+    tuner_commands = collections.defaultdict(dict)
+    for name, tuner_config in service.cfg.__dict__.items():
+        for method_name, fun in inspect.getmembers(
+            tuner_config.tuner_class,
+            lambda v: inspect.isfunction(v) and not v.__name__.startswith("_"),
+        ):
+            tuner_commands[name][method_name] = {
+                "task_name": method_name,
+                "arguments": typing.get_type_hints(fun),
+                "doc": fun.__doc__,
+            }
     payload = {
         "title": "Tuner control",
         "description": "Control and monitor MEP tuner devices",
         "author": "Ryan Volz <rvolz@mit.edu>",
         "url": "ghcr.io/spectrumx/mep-tuner-control:latest",
         "source": "https://github.com/spectrumx/mep-tuner-control",
+        "output": {
+            "status": {
+                "type": "mqtt",
+                "value": f"{service.status_topic}",
+            },
+        },
         "version": "0.1",
         "type": "service",
         "time_started": time.time(),
+        "command_topic": f"{service.command_topic}",
+        "commands": {
+            "status": {
+                "task_name": "status",
+                "arguments": {},
+            },
+            "init_tuner": {
+                "task_name": "init_tuner",
+                "arguments": {"force_tuner": "str"},
+            },
+            "restart_tuner": {
+                "task_name": "restart_tuner",
+                "arguments": {},
+            },
+        },
+        "tuner_commands": tuner_commands,
     }
     json_payload = json.dumps(payload)
     logger.debug(
@@ -110,11 +147,11 @@ async def send_announce(client, service):
 
 async def send_status(client, service):
     payload = {
-        "state": "no_tuners",
+        "state": "disabled",
         "timestamp": time.time(),
     }
     if service.tuner is not None:
-        payload["state"] = "ready"
+        payload["state"] = "online"
         payload["tuner"] = dataclasses.asdict(service.tuner)
     json_payload = json.dumps(payload)
     logger.debug(
@@ -168,7 +205,7 @@ async def process_commands(client, service):
             response_topic = payload.get("response_topic", None)
             if service.tuner is not None:
                 try:
-                    service.tuner = service.tuner.replace()
+                    service.tuner = dataclasses.replace(service.tuner)
                 except Exception:
                     logger.exception("Error restarting tuner")
                     msg = f"ERROR restarting tuner:\n{traceback.format_exc()}"
