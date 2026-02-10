@@ -88,7 +88,7 @@ class LMX2820Tuner(TunerBase):
 
 
 LMX2820TunerParams = dataclasses.make_dataclass(
-    "ValonTunerParams",
+    "LMX2820TunerParams",
     [(f.name, f.type, f) for f in dataclasses.fields(LMX2820Tuner)]
     + [
         (
