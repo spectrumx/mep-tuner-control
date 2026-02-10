@@ -23,11 +23,12 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
+    libusb-1.0 \
     nano \
     vim
 
 # Install Python dependencies not covered by deb packages
-RUN python3 -m pip install --no-cache-dir aiomqtt anyio exceptiongroup jsonargparse[ruamel,signatures] pyserial typing-extensions
+RUN python3 -m pip install --no-cache-dir Adafruit-Blinka aiomqtt anyio exceptiongroup jsonargparse[ruamel,signatures] pydantic pyserial typing-extensions
 
 ############################################################
 # MEP image

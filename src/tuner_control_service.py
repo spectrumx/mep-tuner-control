@@ -30,7 +30,7 @@ import exceptiongroup
 import jsonargparse
 from typing_extensions import Format, get_annotations
 
-from mep_tuners import TunerBase, ValonTunerParams
+from mep_tuners import LMX2820TunerParams, TunerBase, ValonTunerParams
 
 logger = logging.getLogger("tuner_control_service")
 logger.setLevel(os.environ.get("TUNER_CONTROL_SERVICE_LOG_LEVEL", "INFO"))
@@ -46,6 +46,9 @@ logger.addHandler(_console_handler)
 class TunerConfig:
     valon: ValonTunerParams = dataclasses.field(
         default_factory=lambda: ValonTunerParams(name="valon")
+    )
+    lmx2820: LMX2820TunerParams = dataclasses.field(
+        default_factory=lambda: LMX2820TunerParams(name="lmx2820")
     )
 
 
