@@ -25,10 +25,10 @@ import traceback
 from typing import Optional
 
 import aiomqtt
-import annotationlib
 import anyio
 import exceptiongroup
 import jsonargparse
+from typing_extensions import Format, get_annotations
 
 from mep_tuners import TunerBase, ValonTunerParams
 
@@ -103,9 +103,7 @@ async def send_announce(client, service):
         ):
             tuner_commands[name][method_name] = {
                 "task_name": method_name,
-                "arguments": annotationlib.get_annotations(
-                    fun, annotationlib.Format.STRING
-                ),
+                "arguments": get_annotations(fun, format=Format.STRING),
                 "doc": fun.__doc__,
             }
     payload = {

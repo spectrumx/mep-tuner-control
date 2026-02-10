@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     vim
 
 # Install Python dependencies not covered by deb packages
-RUN python3 -m pip install --no-cache-dir aiomqtt anyio exceptiongroup jsonargparse[ruamel,signatures] pyserial
+RUN python3 -m pip install --no-cache-dir aiomqtt anyio exceptiongroup jsonargparse[ruamel,signatures] pyserial typing-extensions
 
 ############################################################
 # MEP image
