@@ -30,7 +30,7 @@ import jsonargparse
 from mep_tuners import TunerBase, ValonTunerParams
 
 logger = logging.getLogger("tuner_control_service")
-logger.setLevel(os.environ.get("TUNER_CONTROL_SERVICE_LOG_LEVEL", "NOTSET"))
+logger.setLevel(os.environ.get("TUNER_CONTROL_SERVICE_LOG_LEVEL", "INFO"))
 logger.propagate = False
 _console_handler = logging.StreamHandler()
 _console_handler.setLevel(logging.DEBUG)
@@ -72,16 +72,20 @@ class TunerControlService:
 def init_tuner(service, force_tuner=None):
     """Iterate through known tuners and take the first ready one"""
     if force_tuner is not None:
+        logger.debug(f"Force initing tuner: {force_tuner}")
         tuner_config = getattr(service.cfg, force_tuner)
         service.tuner = tuner_config.create_tuner()
     for name, tuner_config in service.cfg.__dict__.items():
         try:
+            logger.debug(f"Trying to init tuner: {name}")
             service.tuner = tuner_config.create_tuner()
         except Exception:
             logger.info(f"Failed to init tuner: {name}", exc_info=True)
         else:
+            logger.info(f"Initialized tuner: {name}")
             break
     else:
+        logger.info("No tuners found")
         service.tuner = None
 
 
@@ -96,7 +100,11 @@ async def send_announce(client, service):
         "type": "service",
         "time_started": time.time(),
     }
-    await client.publish(service.announce_topic, json.dumps(payload), retain=True)
+    json_payload = json.dumps(payload)
+    logger.debug(
+        f"Announcing {service.name} on {service.announce_topic}:\n{json_payload}"
+    )
+    await client.publish(service.announce_topic, json_payload, retain=True)
 
 
 async def send_status(client, service):
@@ -107,7 +115,11 @@ async def send_status(client, service):
     if service.tuner is not None:
         payload["state"] = "ready"
         payload["tuner"] = dataclasses.asdict(service.tuner)
-    await client.publish(service.status_topic, json.dumps(payload), retain=True)
+    json_payload = json.dumps(payload)
+    logger.debug(
+        f"Sending {service.name} status to {service.status_topic}:\n{json_payload}"
+    )
+    await client.publish(service.status_topic, json_payload, retain=True)
 
 
 async def send_response(client, service, message, response_topic=None):
@@ -117,7 +129,11 @@ async def send_response(client, service, message, response_topic=None):
         "message": message,
         "timestamp": time.time(),
     }
-    await client.publish(response_topic, json.dumps(payload))
+    json_payload = json.dumps(payload)
+    logger.debug(
+        f"Sending {service.name} command response to {response_topic}:\n{json_payload}"
+    )
+    await client.publish(response_topic, json_payload)
 
 
 async def process_tuner_command(client, service, payload):
@@ -125,28 +141,35 @@ async def process_tuner_command(client, service, payload):
     response_topic = payload.get("response_topic", None)
     try:
         cmd = payload["task_name"]
+        logger.info(f"Processing {cmd} command")
         fun = service.tuner.getattr(cmd)
         result = fun(**args)
         msg = f"{service.tuner.name}.{cmd}: {result if result is not None else 'Done'}"
         await send_response(client, service, msg, response_topic)
         await send_status(client, service)
     except Exception:
+        logger.exception(f"Error processing command payload:\n{json.dumps(payload)}")
         msg = f"ERROR tuner command:\n{traceback.format_exc()}"
         await send_response(client, service, msg, response_topic)
 
 
 async def process_commands(client, service):
+    logger.info(f"{service.name} listening for commands")
     async for message in client.messages:
         payload = json.loads(message.payload.decode())
+        logger.debug(f"Received message:\n{json.dumps(payload)}")
         if payload["task_name"] == "init_tuner":
+            logger.info("Processing init_tuner command")
             init_tuner(service, force_tuner=payload.get("force_tuner", None))
             await send_status(client, service)
         elif payload["task_name"] == "restart_tuner":
+            logger.info("Processing restart_tuner command")
             response_topic = payload.get("response_topic", None)
             if service.tuner is not None:
                 try:
                     service.tuner = service.tuner.replace()
                 except Exception:
+                    logger.exception("Error restarting tuner")
                     msg = f"ERROR restarting tuner:\n{traceback.format_exc()}"
                     await send_response(client, service, msg, response_topic)
                 else:
@@ -154,6 +177,7 @@ async def process_commands(client, service):
                     await send_response(client, service, msg, response_topic)
             await send_status(client, service)
         elif payload["task_name"] == "status":
+            logger.info("Processing status command")
             await send_status(client, service)
         else:
             await process_tuner_command(client, service, payload)
@@ -181,7 +205,7 @@ async def main(service):
                 await send_status(client, service)
                 with exceptiongroup.catch(
                     {
-                        Exception: lambda exc: traceback.print_exc(),
+                        Exception: lambda exc: logger.error("Exception", exc_info=exc),
                     }
                 ):
                     async with anyio.create_task_group() as tg:
@@ -191,7 +215,7 @@ async def main(service):
                 "Connection to MQTT server lost;"
                 f" Reconnecting in {interval} seconds ..."
             )
-            print(msg)
+            logger.warning(msg)
             await anyio.sleep(interval)
 
 
@@ -199,4 +223,5 @@ if __name__ == "__main__":
     service = jsonargparse.auto_cli(
         TunerControlService, env_prefix="TUNER", default_env=True
     )
+    logger.info(f"Starting {service.name}")
     anyio.run(main, service)
