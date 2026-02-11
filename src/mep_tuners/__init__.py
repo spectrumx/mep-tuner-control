@@ -15,11 +15,20 @@
 import logging
 import os
 
+from .dummy import DummyTuner, DummyTunerParams
 from .lmx2820 import LMX2820Tuner, LMX2820TunerParams
 from .tuner_base import TunerBase
 from .valon import ValonTuner, ValonTunerParams
 
-__all__ = (LMX2820Tuner, LMX2820TunerParams, TunerBase, ValonTuner, ValonTunerParams)
+__all__ = (
+    DummyTuner,
+    DummyTunerParams,
+    LMX2820Tuner,
+    LMX2820TunerParams,
+    TunerBase,
+    ValonTuner,
+    ValonTunerParams,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(

@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     vim
 
 # Install Python dependencies not covered by deb packages
-RUN python3 -m pip install --no-cache-dir Adafruit-Blinka aiomqtt anyio exceptiongroup jsonargparse[ruamel,signatures] pydantic pyserial typing-extensions
+RUN python3 -m pip install --no-cache-dir Adafruit-Blinka aiomqtt anyio exceptiongroup jsonargparse[ruamel,signatures] msgspec pydantic pyserial typing-extensions
 
 ############################################################
 # MEP image

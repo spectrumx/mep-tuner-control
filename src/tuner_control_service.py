@@ -15,9 +15,10 @@
 
 import collections
 import dataclasses
+import functools
 import inspect
-import json
 import logging
+import operator
 import os
 import socket
 import time
@@ -28,9 +29,10 @@ import aiomqtt
 import anyio
 import exceptiongroup
 import jsonargparse
+import msgspec
 from typing_extensions import Format, get_annotations
 
-from mep_tuners import LMX2820TunerParams, TunerBase, ValonTunerParams
+from mep_tuners import DummyTunerParams, LMX2820TunerParams, TunerBase, ValonTunerParams
 
 logger = logging.getLogger("tuner_control_service")
 logger.setLevel(os.environ.get("TUNER_CONTROL_SERVICE_LOG_LEVEL", "INFO"))
@@ -38,6 +40,22 @@ logger.propagate = False
 _console_handler = logging.StreamHandler()
 _console_handler.setLevel(logging.DEBUG)
 logger.addHandler(_console_handler)
+
+
+def deep_update(mapping: dict, *updating_mappings: dict) -> dict:
+    """Update nested dictionary from another nested dictionary"""
+    updated_mapping = mapping.copy()
+    for updating_mapping in updating_mappings:
+        for k, v in updating_mapping.items():
+            if (
+                k in updated_mapping
+                and isinstance(updated_mapping[k], dict)
+                and isinstance(v, dict)
+            ):
+                updated_mapping[k] = deep_update(updated_mapping[k], v)
+            else:
+                updated_mapping[k] = v
+    return updated_mapping
 
 
 # Holds tuner object parameters to make available through jsonargparse
@@ -49,6 +67,9 @@ class TunerConfig:
     )
     lmx2820: LMX2820TunerParams = dataclasses.field(
         default_factory=lambda: LMX2820TunerParams(name="lmx2820")
+    )
+    dummy: DummyTunerParams = dataclasses.field(
+        default_factory=lambda: DummyTunerParams(name="dummy")
     )
 
 
@@ -82,6 +103,9 @@ def init_tuner(service, force_tuner=None):
         tuner_config = getattr(service.cfg, force_tuner)
         service.tuner = tuner_config.create_tuner()
     for name, tuner_config in service.cfg.__dict__.items():
+        # skip dummy tuner for auto-init
+        if name == "dummy":
+            continue
         try:
             logger.debug(f"Trying to init tuner: {name}")
             service.tuner = tuner_config.create_tuner()
@@ -141,7 +165,7 @@ async def send_announce(client, service):
         },
         "tuner_commands": tuner_commands,
     }
-    json_payload = json.dumps(payload)
+    json_payload = msgspec.json.encode(payload)
     logger.debug(
         f"Announcing {service.name} on {service.announce_topic}:\n{json_payload}"
     )
@@ -156,7 +180,7 @@ async def send_status(client, service):
     if service.tuner is not None:
         payload["state"] = "online"
         payload["tuner"] = dataclasses.asdict(service.tuner)
-    json_payload = json.dumps(payload)
+    json_payload = msgspec.json.encode(payload)
     logger.debug(
         f"Sending {service.name} status to {service.status_topic}:\n{json_payload}"
     )
@@ -170,11 +194,70 @@ async def send_response(client, service, message, response_topic=None):
         "message": message,
         "timestamp": time.time(),
     }
-    json_payload = json.dumps(payload)
+    json_payload = msgspec.json.encode(payload)
     logger.debug(
         f"Sending {service.name} command response to {response_topic}:\n{json_payload}"
     )
     await client.publish(response_topic, json_payload)
+
+
+async def send_value(client, service, value, response_topic=None):
+    if response_topic is None:
+        response_topic = service.status_topic
+    payload = {
+        "value": value,
+        "timestamp": time.time(),
+    }
+    json_payload = msgspec.json.encode(payload)
+    logger.debug(f"Sending {service.name} value to {response_topic}:\n{json_payload}")
+    await client.publish(response_topic, json_payload)
+
+
+async def process_config_command(client, service, payload):
+    cmd = payload["task_name"].removeprefix("config.")
+    args = payload.get("arguments", {})
+    response_topic = payload.get("response_topic", None)
+    try:
+        if cmd == "get":
+            key = args.get("key", "")
+            try:
+                if not key:
+                    value = service.cfg
+                else:
+                    # does service.cfg.{key} where key can have additional dot levels
+                    value = operator.attrgetter(key)(service.cfg)
+            except AttributeError:
+                msg = f"ERROR config.get: key '{key}' not found."
+                logger.warning(msg)
+                await send_response(client, service, msg, response_topic)
+            else:
+                logger.debug(f"Got config key {key}: {value}")
+                await send_value(client, service, value, response_topic)
+        if cmd == "set":
+            key = args.get("key", "")
+            val = args["value"]
+            # convert config to dict so we can deep update it and then use
+            # msgspec.convert to go back to a dataclass with type checking
+            cfg_dict = dataclasses.asdict(service.cfg)
+            if not key:
+                update_dict = val
+            else:
+                update_dict = functools.reduce(
+                    lambda v, k: {k: v}, reversed(key.split(".")), val
+                )
+            updated_cfg_dict = deep_update(cfg_dict, update_dict)
+            updated_cfg = msgspec.convert(updated_cfg_dict, type=type(service.cfg))
+            service.cfg = updated_cfg
+            logger.debug(f"Set config key {key}: {val}")
+            await send_value(
+                client, service, dataclasses.asdict(service.cfg), response_topic
+            )
+    except Exception:
+        logger.exception(
+            f"Error processing config payload:\n{msgspec.json.encode(payload)}"
+        )
+        msg = f"ERROR config:\n{traceback.format_exc()}"
+        await send_response(client, service, msg, response_topic)
 
 
 async def process_tuner_command(client, service, payload):
@@ -189,7 +272,9 @@ async def process_tuner_command(client, service, payload):
         await send_response(client, service, msg, response_topic)
         await send_status(client, service)
     except Exception:
-        logger.exception(f"Error processing command payload:\n{json.dumps(payload)}")
+        logger.exception(
+            f"Error processing command payload:\n{msgspec.json.encode(payload)}"
+        )
         msg = f"ERROR tuner command:\n{traceback.format_exc()}"
         await send_response(client, service, msg, response_topic)
 
@@ -197,8 +282,8 @@ async def process_tuner_command(client, service, payload):
 async def process_commands(client, service):
     logger.info(f"Service {service.name} listening for commands")
     async for message in client.messages:
-        payload = json.loads(message.payload.decode())
-        logger.debug(f"Received message:\n{json.dumps(payload)}")
+        payload = msgspec.json.decode(message.payload)
+        logger.debug(f"Received message:\n{msgspec.json.encode(payload)}")
         if payload["task_name"] == "init_tuner":
             logger.info("Processing init_tuner command")
             init_tuner(service, force_tuner=payload.get("force_tuner", None))
@@ -220,6 +305,8 @@ async def process_commands(client, service):
         elif payload["task_name"] == "status":
             logger.info("Processing status command")
             await send_status(client, service)
+        elif payload["task_name"].startswith("config."):
+            await process_config_command(client, service, payload)
         else:
             await process_tuner_command(client, service, payload)
 
@@ -227,7 +314,7 @@ async def process_commands(client, service):
 async def main(service):
     will = aiomqtt.Will(
         service.status_topic,
-        payload=json.dumps({"state": "offline"}),
+        payload=msgspec.json.encode({"state": "offline"}),
         qos=0,
         retain=True,
     )
