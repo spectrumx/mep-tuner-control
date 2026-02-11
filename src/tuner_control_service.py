@@ -96,28 +96,44 @@ class TunerControlService:
         init_tuner(self)
 
 
+def create_tuner(name, tuner_config):
+    try:
+        tuner = tuner_config.create_tuner()
+    except Exception:
+        logger.info(f"Failed to init tuner: {name}")
+        logger.debug("Tuner exception:", exc_info=True)
+        return None
+    else:
+        logger.info(f"Initialized tuner: {name}")
+        return tuner
+
+
 def init_tuner(service, force_tuner=None):
     """Iterate through known tuners and take the first ready one"""
     if force_tuner is not None:
         logger.debug(f"Force initing tuner: {force_tuner}")
-        tuner_config = getattr(service.cfg, force_tuner)
-        service.tuner = tuner_config.create_tuner()
-    for name, tuner_config in service.cfg.__dict__.items():
-        # skip dummy tuner for auto-init
-        if name == "dummy":
-            continue
         try:
-            logger.debug(f"Trying to init tuner: {name}")
-            service.tuner = tuner_config.create_tuner()
-        except Exception:
-            logger.info(f"Failed to init tuner: {name}")
-            logger.debug("Tuner exception:", exc_info=True)
-        else:
-            logger.info(f"Initialized tuner: {name}")
-            break
+            tuner_config = getattr(service.cfg, force_tuner)
+        except AttributeError:
+            msg = f"No tuner config for {force_tuner} found"
+            logger.info(msg)
+            return msg
+        tuner = create_tuner(force_tuner, tuner_config)
     else:
-        logger.info("No tuners found")
+        for name, tuner_config in service.cfg.__dict__.items():
+            # skip dummy tuner for auto-init
+            if name == "dummy":
+                continue
+            logger.debug(f"Trying to init tuner: {name}")
+            tuner = create_tuner(name, tuner_config)
+            if tuner is not None:
+                break
+    if tuner is None:
+        msg = "No tuners found"
+        logger.info(msg)
         service.tuner = None
+        return msg
+    service.tuner = tuner
 
 
 async def send_announce(client, service):
@@ -286,7 +302,10 @@ async def process_commands(client, service):
         logger.debug(f"Received message:\n{msgspec.json.encode(payload)}")
         if payload["task_name"] == "init_tuner":
             logger.info("Processing init_tuner command")
-            init_tuner(service, force_tuner=payload.get("force_tuner", None))
+            msg = init_tuner(service, force_tuner=payload.get("force_tuner", None))
+            if msg:
+                response_topic = payload.get("response_topic", None)
+                await send_response(client, service, msg, response_topic)
             await send_status(client, service)
         elif payload["task_name"] == "restart_tuner":
             logger.info("Processing restart_tuner command")
