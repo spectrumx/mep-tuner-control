@@ -118,11 +118,11 @@ class ValonTuner(TunerBase):
                 break
         return response
 
-    def set_freq(self, freq_mhz: float):
+    def set_freq(self, freq_mhz: float, wait: float = 0.1):
         """Set the output frequency of the synthesizer."""
         logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
         cmd = f"F{freq_mhz}MHz"
-        result = self.send_cmd(cmd)
+        result = self.send_cmd(cmd, wait=wait)
         for line in result.splitlines():
             m = re.match("^F\s+(?P<freq_mhz>[\d\.]+)\s+MHz;", line)
             if m:
@@ -134,7 +134,7 @@ class ValonTuner(TunerBase):
         self.freq_mhz = act_freq_mhz
         return act_freq_mhz
 
-    def set_power(self, pwr_dbm: float):
+    def set_power(self, pwr_dbm: float, wait: float = 0.1):
         """Set output power level.
 
         Valid Range -50 - 20. Can be brought lower configuring extra settings in the
@@ -143,7 +143,7 @@ class ValonTuner(TunerBase):
         """
         logger.info(f"Setting output power level to {pwr_dbm} dBm")
         cmd = f"PWR {pwr_dbm}"
-        result = self.send_cmd(cmd)
+        result = self.send_cmd(cmd, wait=wait)
         for line in result.splitlines():
             m = re.match("^PWR\s+(?P<pwr_dbm>[\d\.]+);\s+//\s+dBm", line)
             if m:
@@ -155,11 +155,11 @@ class ValonTuner(TunerBase):
         self.pwr_dbm = act_pwr_dbm
         return act_pwr_dbm
 
-    def get_lock_status(self):
+    def get_lock_status(self, wait: float = 0.1):
         """Return the status of the PLL lock condition from Main and Sub PLLs"""
         logger.info("Getting PLL lock condition from Main and Sub PLLs")
         cmd = "LK"
-        result = self.send_cmd(cmd)
+        result = self.send_cmd(cmd, wait=wait)
         lock_line_received = False
         pll_locked_dict = {}
         for line in result.splitlines():
