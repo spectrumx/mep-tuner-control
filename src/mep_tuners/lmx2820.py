@@ -22,12 +22,8 @@ import logging
 import os
 import typing
 
-import board
-import busio
-import digitalio
 import pydantic
 
-from .lmx2820_impl import LMX2820, LMX2820ChangeFreq, LMX2820StartUp
 from .tuner_base import TunerBase, TunerParamsBase
 
 logger = logging.getLogger(__name__)
@@ -55,6 +51,17 @@ class LMX2820Tuner(TunerBase):
 
     def __post_init__(self):
         """Initialize LMX2820 specific hardware/resources"""
+        # set environment variable to register the FT232H board
+        os.environ["BLINKA_FT232H"] = "1"
+
+        # don't import LMX2820 stuff until needed because the imports fail
+        # when the device cannot be detected
+        import board
+        import busio
+        import digitalio
+
+        from .lmx2820_impl import LMX2820, LMX2820ChangeFreq, LMX2820StartUp
+
         self.tuner_impl = LMX2820(
             self.ref_freq,
             self.ref_doubler,
@@ -76,12 +83,14 @@ class LMX2820Tuner(TunerBase):
         # complete parent init (will set frequency if specified in init params)
         super().__post_init__()
 
+        self._set_freq = LMX2820ChangeFreq
+
     def set_freq(self, freq_mhz: float):
         """Set the output frequency of the tuner"""
         # actual frequency is set in integer Hertz
         f_lo_hz = int(freq_mhz * 1e6)
         logger.info(f"Setting local oscillator frequency to {f_lo_hz} Hz")
-        LMX2820ChangeFreq(self.spi, self.CSpin, self.tuner_impl, f_lo_hz)
+        self._set_freq(self.spi, self.CSpin, self.tuner_impl, f_lo_hz)
         msg = f"Set frequency to {f_lo_hz} Hz"
         self.freq_mhz = f_lo_hz / 1e6
         return msg
