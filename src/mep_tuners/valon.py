@@ -89,7 +89,8 @@ class ValonTuner(TunerBase):
         response = b""
 
         while self.ser.in_waiting:
-            response += self.ser.read(self.ser.in_waiting)
+            # read by line or until we get all waiting bytes or timeout
+            response += self.ser.read_until(size=self.ser.in_waiting)
 
         return response.decode(errors="ignore")
 
