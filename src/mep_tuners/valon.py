@@ -119,7 +119,6 @@ class ValonTuner(TunerBase):
         logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
         cmd = f"F{freq_mhz}MHz"
         result = self.send_cmd(cmd)
-        logger.debug(f"set_freq:\n{result}")
         for line in result.splitlines():
             m = re.match("^F\s+(?P<freq_mhz>[\d\.]+)\s+MHz;", line)
             if m:
@@ -141,7 +140,6 @@ class ValonTuner(TunerBase):
         logger.info(f"Setting output power level to {pwr_dbm} dBm")
         cmd = f"PWR {pwr_dbm}"
         result = self.send_cmd(cmd)
-        logger.debug(f"set_power:\n{result}")
         for line in result.splitlines():
             m = re.match("^PWR\s+(?P<pwr_dbm>[\d\.]+);\s+//\s+dBm", line)
             if m:
@@ -158,7 +156,6 @@ class ValonTuner(TunerBase):
         logger.info("Getting PLL lock condition from Main and Sub PLLs")
         cmd = "LK"
         result = self.send_cmd(cmd)
-        logger.debug(f"get_lock_status:\n{result}")
         lock_line_received = False
         pll_locked_dict = {}
         for line in result.splitlines():
