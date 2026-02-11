@@ -70,22 +70,24 @@ class ValonTuner(TunerBase):
         self.ser.reset_input_buffer()
 
         logger.info("Getting VALON device status string:")
-        self.info = self.send_cmd("STAT")
-        logger.info(self.info)
+        self.info = self.send_cmd("STAT", wait=2.0)
+        # if logger level is debug or lower, we have already logged the info
+        if logger.getEffectiveLevel() > logging.DEBUG:
+            logger.info(self.info)
 
         super().__post_init__()
 
         if self.pwr_dbm is not None:
             self.set_power(self.pwr_dbm)
 
-    def _send_cmd(self, command: str):
+    def _send_cmd(self, command: str, wait: float = 0.1):
         """Send a command string to the Valon over serial.
 
         Appends carriage return. Returns any response.
 
         """
         self.ser.write((command + "\r").encode())
-        time.sleep(0.1)
+        time.sleep(wait)
         response = b""
 
         while self.ser.in_waiting:
@@ -94,7 +96,7 @@ class ValonTuner(TunerBase):
 
         return response.decode(errors="ignore")
 
-    def send_cmd(self, command: str, retries: int = 3):
+    def send_cmd(self, command: str, wait: float = 0.1, retries: int = 3):
         """Send a command string to the Valon over serial.
 
         Appends carriage return. Returns any response.
@@ -103,14 +105,15 @@ class ValonTuner(TunerBase):
         for n in range(retries):
             try:
                 logger.debug(f"Sending tuner command: {command}")
-                response = self._send_cmd(command)
+                response = self._send_cmd(command, wait=wait)
                 logger.debug(response)
             except Exception as e:
                 if n == (retries - 1):
                     raise e
                 else:
                     logger.warning(f"Failed to send command: {command}", exc_info=True)
-                    self._reset_serial_connection()
+                    self.ser.reset_input_buffer()
+                    self.ser.reset_output_buffer()
             else:
                 break
         return response
