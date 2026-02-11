@@ -282,7 +282,7 @@ async def process_tuner_command(client, service, payload):
     try:
         cmd = payload["task_name"]
         logger.info(f"Processing {cmd} command")
-        fun = service.tuner.getattr(cmd)
+        fun = getattr(service.tuner, cmd)
         result = fun(**args)
         msg = f"{service.tuner.name}.{cmd}: {result if result is not None else 'Done'}"
         await send_response(client, service, msg, response_topic)
@@ -302,7 +302,8 @@ async def process_commands(client, service):
         logger.debug(f"Received message:\n{msgspec.json.encode(payload)}")
         if payload["task_name"] == "init_tuner":
             logger.info("Processing init_tuner command")
-            msg = init_tuner(service, force_tuner=payload.get("force_tuner", None))
+            args = payload.get("arguments", {})
+            msg = init_tuner(service, **args)
             if msg:
                 response_topic = payload.get("response_topic", None)
                 await send_response(client, service, msg, response_topic)
