@@ -83,12 +83,12 @@ class ValonTuner(TunerBase):
         Appends carriage return. Returns any response.
 
         """
-        self._ser.write((command + "\r").encode())
+        self.ser.write((command + "\r").encode())
         time.sleep(0.1)
         response = b""
 
-        while self._ser.in_waiting:
-            response += self._ser.read(self._ser.in_waiting)
+        while self.ser.in_waiting:
+            response += self.ser.read(self.ser.in_waiting)
 
         return response.decode(errors="ignore")
 
