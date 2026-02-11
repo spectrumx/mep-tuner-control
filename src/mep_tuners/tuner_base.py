@@ -36,11 +36,18 @@ class TunerBase(ABC):
     def __post_init__(self):
         if self.freq_mhz is not None:
             self.set_freq(self.freq_mhz)
+        else:
+            # on subclasses, may be used to query actual frequency and set attribute
+            self.get_freq()
 
     @abstractmethod
     def set_freq(self, freq_mhz: float):
         """Set tuner frequency - must be implemented by child classes"""
         self.freq_mhz = freq_mhz
+
+    def get_freq(self):
+        """Set tuner frequency - must be implemented by child classes"""
+        return self.freq_mhz
 
 
 @dataclasses.dataclass

@@ -79,6 +79,9 @@ class ValonTuner(TunerBase):
 
         if self.pwr_dbm is not None:
             self.set_power(self.pwr_dbm)
+        else:
+            # sets the attribute
+            self.get_power()
 
     def _send_cmd(self, command: str, wait: float = 0.1):
         """Send a command string to the Valon over serial.
@@ -118,24 +121,49 @@ class ValonTuner(TunerBase):
                 break
         return response
 
-    def set_freq(self, freq_mhz: float, wait: float = 0.1):
-        """Set the output frequency of the synthesizer."""
-        logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
-        cmd = f"F{freq_mhz}MHz"
-        result = self.send_cmd(cmd, wait=wait)
+    @staticmethod
+    def _parse_freq_response(result):
         for line in result.splitlines():
             m = re.match("^F\s+(?P<freq_mhz>[\d\.]+)\s+MHz;", line)
             if m:
-                act_freq_mhz = float(m["freq_mhz"])
+                freq_mhz = float(m["freq_mhz"])
                 break
         else:
-            msg = f"Could not get frequency from set_freq result: {result}"
+            msg = f"Could not get frequency from freq result: {result}"
             raise RuntimeError(msg)
+        return freq_mhz
+
+    def set_freq(self, freq_mhz: float, wait: float = 0.1):
+        """Set the output frequency in MHz of the synthesizer."""
+        logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
+        cmd = f"F{freq_mhz}MHz"
+        result = self.send_cmd(cmd, wait=wait)
+        act_freq_mhz = self._parse_freq_response(result)
         self.freq_mhz = act_freq_mhz
         return act_freq_mhz
 
+    def get_freq(self, wait: float = 0.1):
+        """Get the output frequency in MHz of the synthesizer."""
+        cmd = "F?"
+        result = self.send_cmd(cmd, wait=wait)
+        act_freq_mhz = self._parse_freq_response(result)
+        self.freq_mhz = act_freq_mhz
+        return act_freq_mhz
+
+    @staticmethod
+    def _parse_power_response(result):
+        for line in result.splitlines():
+            m = re.match("^PWR\s+(?P<pwr_dbm>[\d\.]+);\s+//\s+dBm", line)
+            if m:
+                pwr_dbm = float(m["pwr_dbm"])
+                break
+        else:
+            msg = f"Could not get power from set_power result: {result}"
+            raise RuntimeError(msg)
+        return pwr_dbm
+
     def set_power(self, pwr_dbm: float, wait: float = 0.1):
-        """Set output power level.
+        """Set output power level in dBm.
 
         Valid Range -50 - 20. Can be brought lower configuring extra settings in the
         Valon.
@@ -144,14 +172,15 @@ class ValonTuner(TunerBase):
         logger.info(f"Setting output power level to {pwr_dbm} dBm")
         cmd = f"PWR {pwr_dbm}"
         result = self.send_cmd(cmd, wait=wait)
-        for line in result.splitlines():
-            m = re.match("^PWR\s+(?P<pwr_dbm>[\d\.]+);\s+//\s+dBm", line)
-            if m:
-                act_pwr_dbm = float(m["pwr_dbm"])
-                break
-        else:
-            msg = f"Could not get power from set_power result: {result}"
-            raise RuntimeError(msg)
+        act_pwr_dbm = self._parse_power_response(result)
+        self.pwr_dbm = act_pwr_dbm
+        return act_pwr_dbm
+
+    def get_power(self, wait: float = 0.1):
+        """Get the output power level in dBm."""
+        cmd = "PWR?"
+        result = self.send_cmd(cmd, wait=wait)
+        act_pwr_dbm = self._parse_power_response(result)
         self.pwr_dbm = act_pwr_dbm
         return act_pwr_dbm
 
