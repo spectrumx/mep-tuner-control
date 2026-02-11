@@ -40,9 +40,8 @@ class DummyTuner(TunerBase):
     def set_freq(self, freq_mhz: float):
         """Set the output frequency of the tuner"""
         logger.info(f"{self.name} tuner setting frequency to {freq_mhz} MHz")
-        msg = f"Set frequency to {freq_mhz} MHz"
         self.freq_mhz = freq_mhz
-        return msg
+        return freq_mhz
 
 
 DummyTunerParams = dataclasses.make_dataclass(

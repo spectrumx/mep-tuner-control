@@ -203,36 +203,28 @@ async def send_status(client, service):
     await client.publish(service.status_topic, json_payload, retain=True)
 
 
-async def send_response(client, service, message, response_topic=None):
-    if response_topic is None:
-        response_topic = service.status_topic
-    payload = {
-        "message": message,
-        "timestamp": time.time(),
-    }
-    json_payload = msgspec.json.encode(payload)
-    logger.debug(
-        f"Sending {service.name} command response to {response_topic}:\n{json_payload}"
+async def send_response(client, service, response, command_payload=None):
+    if command_payload is None:
+        command_payload = {}
+    response_topic = command_payload.get("response_topic", service.status_topic)
+    session_id = command_payload.get("session_id", None)
+    task_name = command_payload.get("task_name", None)
+
+    response.update(
+        session_id=session_id,
+        task_name=task_name,
+        timestamp=time.time(),
     )
-    await client.publish(response_topic, json_payload)
-
-
-async def send_value(client, service, value, response_topic=None):
-    if response_topic is None:
-        response_topic = service.status_topic
-    payload = {
-        "value": value,
-        "timestamp": time.time(),
-    }
-    json_payload = msgspec.json.encode(payload)
-    logger.debug(f"Sending {service.name} value to {response_topic}:\n{json_payload}")
+    json_payload = msgspec.json.encode(response)
+    logger.debug(
+        f"Sending {service.name} response to {response_topic}:\n{json_payload}"
+    )
     await client.publish(response_topic, json_payload)
 
 
 async def process_config_command(client, service, payload):
     cmd = payload["task_name"].removeprefix("config.")
     args = payload.get("arguments", {})
-    response_topic = payload.get("response_topic", None)
     try:
         if cmd == "get":
             key = args.get("key", "")
@@ -243,12 +235,14 @@ async def process_config_command(client, service, payload):
                     # does service.cfg.{key} where key can have additional dot levels
                     value = operator.attrgetter(key)(service.cfg)
             except AttributeError:
-                msg = f"ERROR config.get: key '{key}' not found."
+                msg = f"Key '{key}' not found."
                 logger.warning(msg)
-                await send_response(client, service, msg, response_topic)
+                response = {"exception": msg}
+                await send_response(client, service, response, payload)
             else:
                 logger.debug(f"Got config key {key}: {value}")
-                await send_value(client, service, value, response_topic)
+                response = {"value": value}
+                await send_response(client, service, response, payload)
         if cmd == "set":
             key = args.get("key", "")
             val = args["value"]
@@ -265,34 +259,32 @@ async def process_config_command(client, service, payload):
             updated_cfg = msgspec.convert(updated_cfg_dict, type=type(service.cfg))
             service.cfg = updated_cfg
             logger.debug(f"Set config key {key}: {val}")
-            await send_value(
-                client, service, dataclasses.asdict(service.cfg), response_topic
-            )
+            response = {"value": dataclasses.asdict(service.cfg)}
+            await send_response(client, service, response, payload)
     except Exception:
         logger.exception(
             f"Error processing config payload:\n{msgspec.json.encode(payload)}"
         )
-        msg = f"ERROR config:\n{traceback.format_exc()}"
-        await send_response(client, service, msg, response_topic)
+        response = {"exception": traceback.format_exc()}
+        await send_response(client, service, response, payload)
 
 
 async def process_tuner_command(client, service, payload):
     args = payload.get("arguments", {})
-    response_topic = payload.get("response_topic", None)
     try:
         cmd = payload["task_name"]
         logger.info(f"Processing {cmd} command")
         fun = getattr(service.tuner, cmd)
         result = fun(**args)
-        msg = f"{service.tuner.name}.{cmd}: {result if result is not None else 'Done'}"
-        await send_response(client, service, msg, response_topic)
+        response = {"value": result}
+        await send_response(client, service, response, payload)
         await send_status(client, service)
     except Exception:
         logger.exception(
             f"Error processing command payload:\n{msgspec.json.encode(payload)}"
         )
-        msg = f"ERROR tuner command:\n{traceback.format_exc()}"
-        await send_response(client, service, msg, response_topic)
+        response = {"exception": traceback.format_exc()}
+        await send_response(client, service, response, payload)
 
 
 async def process_commands(client, service):
@@ -305,22 +297,22 @@ async def process_commands(client, service):
             args = payload.get("arguments", {})
             msg = init_tuner(service, **args)
             if msg:
-                response_topic = payload.get("response_topic", None)
-                await send_response(client, service, msg, response_topic)
+                response = {"message": msg}
+                await send_response(client, service, response, payload)
             await send_status(client, service)
         elif payload["task_name"] == "restart_tuner":
             logger.info("Processing restart_tuner command")
-            response_topic = payload.get("response_topic", None)
             if service.tuner is not None:
                 try:
                     service.tuner = dataclasses.replace(service.tuner)
                 except Exception:
                     logger.exception("Error restarting tuner")
-                    msg = f"ERROR restarting tuner:\n{traceback.format_exc()}"
-                    await send_response(client, service, msg, response_topic)
+                    response = {"exception": traceback.format_exc()}
+                    await send_response(client, service, response, payload)
                 else:
                     msg = "Restarted tuner successfully"
-                    await send_response(client, service, msg, response_topic)
+                    response = {"message": msg}
+                    await send_response(client, service, response, payload)
             await send_status(client, service)
         elif payload["task_name"] == "status":
             logger.info("Processing status command")

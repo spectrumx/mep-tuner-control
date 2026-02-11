@@ -21,6 +21,7 @@ Ryan Volz (rvolz@mit.edu) 01/2026
 import dataclasses
 import logging
 import os
+import re
 import time
 import typing
 
@@ -118,8 +119,17 @@ class ValonTuner(TunerBase):
         logger.info(f"Setting local oscillator frequency to {freq_mhz} MHz")
         cmd = f"F{freq_mhz}MHz"
         result = self.send_cmd(cmd)
-        self.freq_mhz = freq_mhz
-        return result
+        logger.debug(f"set_freq:\n{result}")
+        for line in result.splitlines():
+            m = re.match("^F\s+(?P<freq_mhz>[\d\.]+)\s+MHz;", line)
+            if m:
+                act_freq_mhz = float(m["freq_mhz"])
+                break
+        else:
+            msg = f"Could not get frequency from set_freq result: {result}"
+            raise RuntimeError(msg)
+        self.freq_mhz = act_freq_mhz
+        return act_freq_mhz
 
     def set_power(self, pwr_dbm: float):
         """Set output power level.
@@ -131,15 +141,42 @@ class ValonTuner(TunerBase):
         logger.info(f"Setting output power level to {pwr_dbm} dBm")
         cmd = f"PWR {pwr_dbm}"
         result = self.send_cmd(cmd)
-        self.pwr_dbm = pwr_dbm
-        return result
+        logger.debug(f"set_power:\n{result}")
+        for line in result.splitlines():
+            m = re.match("^PWR\s+(?P<pwr_dbm>[\d\.]+);\s+//\s+dBm", line)
+            if m:
+                act_pwr_dbm = float(m["pwr_dbm"])
+                break
+        else:
+            msg = f"Could not get power from set_power result: {result}"
+            raise RuntimeError(msg)
+        self.pwr_dbm = act_pwr_dbm
+        return act_pwr_dbm
 
     def get_lock_status(self):
         """Return the status of the PLL lock condition from Main and Sub PLLs"""
         logger.info("Getting PLL lock condition from Main and Sub PLLs")
         cmd = "LK"
         result = self.send_cmd(cmd)
-        return result
+        logger.debug(f"get_lock_status:\n{result}")
+        lock_line_received = False
+        pll_locked_dict = {}
+        for line in result.splitlines():
+            if not lock_line_received:
+                m = re.match("^LK", line)
+                if m:
+                    lock_line_received = True
+            else:
+                m = re.match("^(?P<pll_name>.+?)\s+:\s+(?P<status>.+?)$", line)
+                if m:
+                    pll_name = m["pll_name"].lower().replace(" ", "_")
+                    locked = m["status"] == "locked"
+                    pll_locked_dict[pll_name] = locked
+        if not lock_line_received or not pll_locked_dict:
+            msg = f"Could not parse get_lock_status: {result}"
+            raise RuntimeError(msg)
+        self.locked = all(pll_locked_dict.values())
+        return pll_locked_dict
 
 
 ValonTunerParams = dataclasses.make_dataclass(

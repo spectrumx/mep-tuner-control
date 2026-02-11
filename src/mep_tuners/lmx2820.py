@@ -91,9 +91,8 @@ class LMX2820Tuner(TunerBase):
         f_lo_hz = int(freq_mhz * 1e6)
         logger.info(f"Setting local oscillator frequency to {f_lo_hz} Hz")
         self._set_freq(self.spi, self.CSpin, self.tuner_impl, f_lo_hz)
-        msg = f"Set frequency to {f_lo_hz} Hz"
         self.freq_mhz = f_lo_hz / 1e6
-        return msg
+        return self.freq_mhz
 
 
 LMX2820TunerParams = dataclasses.make_dataclass(
