@@ -124,7 +124,7 @@ class ValonTuner(TunerBase):
     @staticmethod
     def _parse_freq_response(result):
         for line in result.splitlines():
-            m = re.match("^F\s+(?P<freq_mhz>[\d\.]+)\s+MHz;", line)
+            m = re.match(r"^F\s+(?P<freq_mhz>[\d\.]+)\s+MHz;", line)
             if m:
                 freq_mhz = float(m["freq_mhz"])
                 break
@@ -153,7 +153,7 @@ class ValonTuner(TunerBase):
     @staticmethod
     def _parse_power_response(result):
         for line in result.splitlines():
-            m = re.match("^PWR\s+(?P<pwr_dbm>[\d\.]+);\s+//\s+dBm", line)
+            m = re.match(r"^PWR\s+(?P<pwr_dbm>[\d\.]+);\s+//\s+dBm", line)
             if m:
                 pwr_dbm = float(m["pwr_dbm"])
                 break
@@ -193,11 +193,11 @@ class ValonTuner(TunerBase):
         pll_locked_dict = {}
         for line in result.splitlines():
             if not lock_line_received:
-                m = re.match("^LK", line)
+                m = re.match(r"^LK", line)
                 if m:
                     lock_line_received = True
             else:
-                m = re.match("^(?P<pll_name>.+?)\s+:\s+(?P<status>.+?)$", line)
+                m = re.match(r"^(?P<pll_name>.+?)\s+:\s+(?P<status>.+?)$", line)
                 if m:
                     pll_name = m["pll_name"].lower().replace(" ", "_")
                     locked = m["status"] == "locked"
