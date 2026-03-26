@@ -276,6 +276,16 @@ async def process_config_command(client, service, payload):
 
 async def process_tuner_command(client, service, payload):
     args = payload.get("arguments", {})
+    tuner_name = args.pop("tuner", None)
+    # init tuner if none are or if the requested tuner is different from the active one
+    if (service.tuner is None) or (
+        tuner_name is not None and tuner_name != service.tuner.name
+    ):
+        msg = init_tuner(service, force_tuner=tuner_name)
+        if msg:
+            response = {"message": msg}
+            await send_response(client, service, response, payload)
+    # now service.tuner is either None (failure) or the current/requested tuner
     try:
         cmd = payload["task_name"]
         logger.info(f"Processing {cmd} command")
