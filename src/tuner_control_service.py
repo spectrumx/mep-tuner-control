@@ -281,6 +281,7 @@ async def process_tuner_command(client, service, payload):
     if (service.tuner is None) or (
         tuner_name is not None and tuner_name != service.tuner.name
     ):
+        logger.info(f"Requested tuner {tuner_name} is not active, initializing.")
         msg = init_tuner(service, force_tuner=tuner_name)
         if msg:
             response = {"message": msg}
