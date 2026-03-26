@@ -292,9 +292,9 @@ async def process_tuner_command(client, service, payload):
         logger.info(f"Processing {cmd} command")
         fun = getattr(service.tuner, cmd)
         result = fun(**args)
-        status_response = await send_status(client, service)
-        status_response["value"] = result
-        await send_response(client, service, status_response, payload)
+        response = {"value": result}
+        await send_response(client, service, response, payload)
+        await send_status(client, service)
     except Exception:
         logger.exception(
             f"Error processing command payload:\n{msgspec.json.encode(payload)}"
