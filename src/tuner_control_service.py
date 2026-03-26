@@ -81,6 +81,7 @@ class TunerControlService:
     cfg: TunerConfig = dataclasses.field(default_factory=lambda: TunerConfig())
     name: str = "tuner_control"
     node_id: Optional[str] = None
+    response_topic: str = "{service.name}/response"
     status_topic: str = "{service.name}/status"
     # service state variables
     tuner: Optional[TunerBase] = dataclasses.field(default=None, init=False)
@@ -91,6 +92,7 @@ class TunerControlService:
 
         self.announce_topic = self.announce_topic.format(service=self)
         self.command_topic = self.command_topic.format(service=self)
+        self.response_topic = self.response_topic.format(service=self)
         self.status_topic = self.status_topic.format(service=self)
 
         init_tuner(self)
@@ -165,6 +167,7 @@ async def send_announce(client, service):
         "type": "service",
         "time_started": time.time(),
         "command_topic": f"{service.command_topic}",
+        "default_response_topic": f"{service.response_topic}",
         "commands": {
             "status": {
                 "task_name": "status",
@@ -201,12 +204,13 @@ async def send_status(client, service):
         f"Sending {service.name} status to {service.status_topic}:\n{json_payload}"
     )
     await client.publish(service.status_topic, json_payload, retain=True)
+    return payload
 
 
 async def send_response(client, service, response, command_payload=None):
     if command_payload is None:
         command_payload = {}
-    response_topic = command_payload.get("response_topic", service.status_topic)
+    response_topic = command_payload.get("response_topic", service.response_topic)
     session_id = command_payload.get("session_id", None)
     task_name = command_payload.get("task_name", None)
 
@@ -220,6 +224,7 @@ async def send_response(client, service, response, command_payload=None):
         f"Sending {service.name} response to {response_topic}:\n{json_payload}"
     )
     await client.publish(response_topic, json_payload)
+    return response
 
 
 async def process_config_command(client, service, payload):
@@ -276,9 +281,9 @@ async def process_tuner_command(client, service, payload):
         logger.info(f"Processing {cmd} command")
         fun = getattr(service.tuner, cmd)
         result = fun(**args)
-        response = {"value": result}
-        await send_response(client, service, response, payload)
-        await send_status(client, service)
+        status_response = await send_status(client, service)
+        status_response["value"] = result
+        await send_response(client, service, status_response, payload)
     except Exception:
         logger.exception(
             f"Error processing command payload:\n{msgspec.json.encode(payload)}"
@@ -296,10 +301,10 @@ async def process_commands(client, service):
             logger.info("Processing init_tuner command")
             args = payload.get("arguments", {})
             msg = init_tuner(service, **args)
+            status_response = await send_status(client, service)
             if msg:
-                response = {"message": msg}
-                await send_response(client, service, response, payload)
-            await send_status(client, service)
+                status_response["message"] = msg
+                await send_response(client, service, status_response, payload)
         elif payload["task_name"] == "restart_tuner":
             logger.info("Processing restart_tuner command")
             if service.tuner is not None:
@@ -316,7 +321,8 @@ async def process_commands(client, service):
             await send_status(client, service)
         elif payload["task_name"] == "status":
             logger.info("Processing status command")
-            await send_status(client, service)
+            status_response = await send_status(client, service)
+            await send_response(client, service, status_response, payload)
         elif payload["task_name"].startswith("config."):
             await process_config_command(client, service, payload)
         else:
