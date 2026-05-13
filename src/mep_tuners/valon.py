@@ -59,6 +59,10 @@ class ValonTuner(TunerBase):
     """Serial device read timeout in seconds"""
     pwr_dbm: typing.Optional[float] = None
     """Output power in dBm"""
+    external_ref: typing.Optional[bool] = None
+    """Whether or not to use an external reference source"""
+    external_ref_freq_mhz: typing.Optional[float] = None
+    """External reference source frequency in MHz"""
     info: typing.Optional[str] = None
     """Status string (set upon initialization)"""
 
@@ -82,6 +86,18 @@ class ValonTuner(TunerBase):
         else:
             # sets the attribute
             self.get_power()
+
+        if self.external_ref is not None:
+            self.set_external_ref(self.external_ref)
+        else:
+            # sets the attribute
+            self.get_external_ref()
+
+        if self.external_ref_freq_mhz is not None:
+            self.set_external_ref_freq(self.external_ref_freq_mhz)
+        else:
+            # sets the attribute
+            self.get_external_ref_freq()
 
     def _send_cmd(self, command: str, wait: float = 0.1):
         """Send a command string to the Valon over serial.
@@ -183,6 +199,65 @@ class ValonTuner(TunerBase):
         act_pwr_dbm = self._parse_power_response(result)
         self.pwr_dbm = act_pwr_dbm
         return act_pwr_dbm
+
+    @staticmethod
+    def _parse_refs_response(result):
+        for line in result.splitlines():
+            m = re.match(r"^REFS\s+(?P<external_ref>\d);", line)
+            if m:
+                external_ref = bool(m["external_ref"])
+                break
+        else:
+            msg = f"Could not get external_ref from REFS result: {result}"
+            raise RuntimeError(msg)
+        return external_ref
+
+    def set_external_ref(self, enabled: bool, wait: float = 0.1):
+        """Enable (True) or disable (False) the external reference source."""
+        logger.info(f"Setting external reference source to enabled={enabled}")
+        cmd = f"REFS {int(enabled)}"
+        result = self.send_cmd(cmd, wait=wait)
+        act_external_ref = self._parse_refs_response(result)
+        self.external_ref = act_external_ref
+        return act_external_ref
+
+    def get_external_ref(self, wait: float = 0.1):
+        """Get whether the external reference is enabled (T) or disabled (F)."""
+        cmd = "REFS?"
+        result = self.send_cmd(cmd, wait=wait)
+        act_external_ref = self._parse_refs_response(result)
+        self.external_ref = act_external_ref
+        return act_external_ref
+
+    @staticmethod
+    def _parse_ref_freq_response(result):
+        for line in result.splitlines():
+            m = re.match(r"^REF\s+(?P<ref_freq_mhz>[\d\.]+)\s+MHz;", line)
+            if m:
+                ref_freq_mhz = float(m["ref_freq_mhz"])
+                break
+        else:
+            msg = f"Could not get reference frequency from REF result: {result}"
+            raise RuntimeError(msg)
+        return ref_freq_mhz
+
+    def set_external_ref_freq(self, freq_mhz: float, wait: float = 0.1):
+        """Set the external reference source frequency in MHz."""
+        logger.info(f"Setting reference source frequency to {freq_mhz} MHz")
+        cmd = f"REF {freq_mhz}MHz"
+        result = self.send_cmd(cmd, wait=wait)
+        act_freq_mhz = self._parse_ref_freq_response(result)
+        self.external_ref_freq_mhz = act_freq_mhz
+        return act_freq_mhz
+        return act_freq_mhz
+
+    def get_external_ref_freq(self, wait: float = 0.1):
+        """Get the external reference source frequency in MHz."""
+        cmd = "REF?"
+        result = self.send_cmd(cmd, wait=wait)
+        act_freq_mhz = self._parse_ref_freq_response(result)
+        self.external_ref_freq_mhz = act_freq_mhz
+        return act_freq_mhz
 
     def get_lock_status(self, wait: float = 0.1):
         """Return the status of the PLL lock condition from Main and Sub PLLs"""
