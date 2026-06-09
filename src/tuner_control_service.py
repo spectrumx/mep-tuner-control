@@ -64,7 +64,10 @@ def deep_update(mapping: dict, *updating_mappings: dict) -> dict:
 class TunerConfig:
     valon: ValonTunerParams = dataclasses.field(
         default_factory=lambda: ValonTunerParams(
-            name="valon", external_ref=True, external_ref_freq_mhz=10.0
+            name="valon",
+            external_ref=True,
+            external_ref_freq_mhz=10.0,
+            pwr_dbm=10.0,
         )
     )
     lmx2820: LMX2820TunerParams = dataclasses.field(
